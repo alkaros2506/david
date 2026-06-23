@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://review-copilot/spec/output-schema.json",
+  "title": "PR triage classification",
+  "description": "Output of the reviewing-a-pull-request classifier. Consumed by render_viewer.py.",
+  "type": "object",
+  "required": ["pr", "rules_sources", "groups", "generated_at"],
+  "additionalProperties": false,
+  "properties": {
+    "pr": {
+      "type": "object",
+      "required": ["id", "title"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "description": "Stable id, e.g. owner/repo#123 or a branch name" },
+        "title": { "type": "string" },
+        "url": { "type": "string" },
+        "base_sha": { "type": "string" },
+        "head_sha": { "type": "string" },
+        "description_summary": { "type": "string", "description": "One-paragraph summary of the PR description" }
+      }
+    },
+    "rules_sources": {
+      "type": "array",
+      "description": "Repo agent-instruction files actually used to classify (CLAUDE.md, AGENTS.md, ...)",
+      "items": { "type": "string" }
+    },
+    "groups": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/group" }
+    },
+    "generated_at": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "group": {
+      "type": "object",
+      "required": ["id", "title", "novelty", "blast", "priority", "citations", "review_focus"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string", "description": "Human-readable name of the logical change, e.g. 'Add Invoice form'" },
+        "summary": { "type": "string", "description": "1-2 sentences on what this group does" },
+        "novelty": {
+          "type": "object",
+          "required": ["tier", "rationale"],
+          "additionalProperties": false,
+          "properties": {
+            "tier": { "enum": ["busy_work", "new_capability", "new_architecture"] },
+            "rationale": { "type": "string", "description": "One line: WHY this tier (what to worry about), grounded in repo patterns" }
+          }
+        },
+        "blast": {
+          "type": "object",
+          "required": ["level", "surfaces", "rationale"],
+          "additionalProperties": false,
+          "properties": {
+            "level": { "enum": ["low", "medium", "high"] },
+            "surfaces": {
+              "type": "array",
+              "description": "Which of the 8 blast surfaces this group touches",
+              "items": {
+                "enum": [
+                  "code_dependencies",
+                  "public_interfaces",
+                  "data_stores",
+                  "security_auth",
+                  "sensitive_domains",
+                  "network_boundaries",
+                  "runtime_infra_config",
+                  "shared_primitives"
+                ]
+              }
+            },
+            "rationale": { "type": "string", "description": "One line: WHY this blast level" }
+          }
+        },
+        "priority": { "type": "integer", "minimum": 1, "description": "1 = review first (from the priority matrix)" },
+        "citations": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["file"],
+            "additionalProperties": false,
+            "properties": {
+              "file": { "type": "string" },
+              "lines": { "type": "string", "description": "e.g. '42-58' or '120'" },
+              "note": { "type": "string" }
+            }
+          }
+        },
+        "review_focus": {
+          "type": "array",
+          "description": "What the human should verify for this group",
+          "items": { "type": "string" }
+        },
+        "checklist": {
+          "type": "array",
+          "description": "Optional concrete checks (e.g. 'new queue → DLQ configured?')",
+          "items": {
+            "type": "object",
+            "required": ["item"],
+            "additionalProperties": false,
+            "properties": {
+              "item": { "type": "string" },
+              "required": { "type": "boolean", "default": false }
+            }
+          }
+        },
+        "ack": {
+          "type": "object",
+          "description": "Filled in by the reviewer via the viewer; the proof-of-review trail",
+          "additionalProperties": false,
+          "properties": {
+            "state": { "enum": ["pending", "acknowledged"], "default": "pending" },
+            "by": { "type": "string" },
+            "at": { "type": "string", "format": "date-time" },
+            "note": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,13 @@
+# Per-PR working dir produced by fetch_pr.sh / the skill
+.pr-review/
+
+# Rendered viewers (regenerated from classification JSON)
+*.review.html
+
+# Python
+__pycache__/
+*.pyc
+
+# OS / editor noise
+.DS_Store
+*.swp

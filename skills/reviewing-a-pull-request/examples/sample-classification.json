@@ -1,0 +1,84 @@
+{
+  "pr": {
+    "id": "acme/storefront#482",
+    "title": "Invoicing: add invoice export + dunning queue",
+    "url": "https://github.com/acme/storefront/pull/482",
+    "base_sha": "a1b2c3d",
+    "head_sha": "f9e8d7c",
+    "description_summary": "Adds an invoice CSV export form, a new field on the invoices table, and introduces a background 'dunning' queue that retries failed payment reminders."
+  },
+  "rules_sources": ["CLAUDE.md", "apps/api/AGENTS.md"],
+  "groups": [
+    {
+      "id": "g1-dunning-queue",
+      "title": "Introduce dunning retry queue",
+      "summary": "New SQS-backed background queue that retries failed payment-reminder emails, with a worker and enqueue calls from the payments service.",
+      "novelty": { "tier": "new_architecture", "rationale": "First message queue in the codebase — new infra pattern, no prior art to follow" },
+      "blast": { "level": "high", "surfaces": ["network_boundaries", "runtime_infra_config", "sensitive_domains"], "rationale": "New network boundary + touches the payments/billing path" },
+      "priority": 1,
+      "citations": [
+        { "file": "apps/api/src/queues/dunning.ts", "lines": "1-88", "note": "queue + worker definition" },
+        { "file": "infra/sqs.tf", "lines": "12-40", "note": "new SQS resource" },
+        { "file": "apps/api/src/payments/reminder.ts", "lines": "55-71", "note": "enqueue on failure" }
+      ],
+      "review_focus": [
+        "Is there a dead-letter queue and a bounded retry policy?",
+        "What happens on poison messages / duplicate reminders to a customer?",
+        "Is there alerting on queue depth and worker failure?"
+      ],
+      "checklist": [
+        { "item": "DLQ configured", "required": true },
+        { "item": "Max-retry / backoff bounded", "required": true },
+        { "item": "Idempotent (no duplicate customer charges/emails)", "required": true },
+        { "item": "Alerting on depth + failures", "required": false }
+      ],
+      "ack": { "state": "pending" }
+    },
+    {
+      "id": "g2-invoice-export-form",
+      "title": "Add invoice CSV export form",
+      "summary": "New export form on the invoices page that posts to a new endpoint, following the existing form + resolver pattern.",
+      "novelty": { "tier": "new_capability", "rationale": "New form/endpoint but built exactly like existing ones per apps/api/AGENTS.md — check pattern fit" },
+      "blast": { "level": "medium", "surfaces": ["public_interfaces", "data_stores"], "rationale": "Adds a public endpoint that reads invoice rows" },
+      "priority": 2,
+      "citations": [
+        { "file": "apps/web/src/invoices/ExportForm.tsx", "lines": "1-64" },
+        { "file": "apps/api/src/resolvers/invoiceExport.ts", "lines": "1-39" }
+      ],
+      "review_focus": [
+        "Does the resolver enforce the same auth/tenant scoping as sibling resolvers?",
+        "Is the export paginated/streamed, or could a large tenant OOM it?"
+      ],
+      "ack": { "state": "pending" }
+    },
+    {
+      "id": "g3-invoice-status-field",
+      "title": "Add 'exported_at' field to invoices",
+      "summary": "Nullable timestamp column + DTO field, set when an invoice is exported.",
+      "novelty": { "tier": "busy_work", "rationale": "Standard additive field following the existing migration pattern" },
+      "blast": { "level": "high", "surfaces": ["data_stores", "sensitive_domains"], "rationale": "Migration on the invoices (billing) table" },
+      "priority": 2,
+      "citations": [
+        { "file": "apps/api/migrations/0142_invoice_exported_at.sql", "lines": "1-6" },
+        { "file": "apps/api/src/models/invoice.ts", "lines": "23" }
+      ],
+      "review_focus": ["Confirm the column is nullable / has a safe default (no table rewrite lock on a hot billing table)"],
+      "ack": { "state": "pending" }
+    },
+    {
+      "id": "g4-tests-and-seed",
+      "title": "Tests, fixtures, and seed data",
+      "summary": "Unit + integration tests for the export form and queue, plus seed invoices.",
+      "novelty": { "tier": "busy_work", "rationale": "Test/seed additions following existing test conventions" },
+      "blast": { "level": "low", "surfaces": ["code_dependencies"], "rationale": "Test-only code, no production reach" },
+      "priority": 4,
+      "citations": [
+        { "file": "apps/api/test/invoiceExport.test.ts", "lines": "1-120" },
+        { "file": "apps/api/seeds/invoices.ts", "lines": "1-30" }
+      ],
+      "review_focus": ["Skim: do the queue tests cover the retry/DLQ path?"],
+      "ack": { "state": "pending" }
+    }
+  ],
+  "generated_at": "2026-06-23T00:00:00Z"
+}
