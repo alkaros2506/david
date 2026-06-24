@@ -28,14 +28,22 @@ The full definitions, the 8-surface blast rubric, and the priority matrix are in
 
 ## The walkthrough (do these in order)
 
+> **Paths:** the working directory is the *target repo being reviewed*, not this skill.
+> Call the scripts by absolute path. Set `SKILL_DIR` to the directory containing this
+> `SKILL.md` (the runtime knows the skill's install path) and use it below. Outputs land
+> in `.pr-review/` inside the target repo.
+
 ### 1. Acquire context
 
 ```bash
 # A PR number (uses gh):
-scripts/fetch_pr.sh <pr-number>
+bash "$SKILL_DIR/scripts/fetch_pr.sh" <pr-number>
 # ...or the current branch vs a base:
-scripts/fetch_pr.sh --local origin/main
+bash "$SKILL_DIR/scripts/fetch_pr.sh" --local origin/main
 ```
+
+This also writes `.pr-review/diffstat.txt` — check it; if it flags a LARGE DIFF, tell the
+classifier to group per top-level directory.
 
 This writes to `.pr-review/`: `diff.patch`, `pr.json` (title/description),
 `comments.json`, and copies of the repo's agent-instruction files
@@ -49,8 +57,12 @@ them, your tiering is just a guess.
 
 Dispatch a subagent so the classifier sees **only the diff + spec + rules**, never
 your conversation history. Fill the template at
-[references/classifier.md](references/classifier.md) and have it write
-`.pr-review/classification.json` conforming to the schema.
+[references/classifier.md](references/classifier.md) — its placeholders take
+**absolute** paths: `{SPEC_PATH}`/`{SCHEMA_PATH}` point at `$SKILL_DIR/spec/...`, and
+`{DIFF_PATH}`/`{DIFFSTAT_PATH}`/`{PR_META_PATH}`/`{RULES_DIR}`/`{OUTPUT_PATH}` point at
+`.pr-review/...` in the target repo. The subagent writes
+`.pr-review/classification.json` conforming to the schema. (`pr.json` is already in the
+schema's `pr` shape, so it copies straight through.)
 
 Hard requirements on the output:
 - **Group by logical capability**, clustering related hunks across files (e.g.
@@ -63,11 +75,13 @@ Hard requirements on the output:
 ### 3. Render the viewer
 
 ```bash
-scripts/render_viewer.py .pr-review/classification.json
+python3 "$SKILL_DIR/scripts/render_viewer.py" .pr-review/classification.json \
+  --diff .pr-review/diff.patch
 ```
 
 Produces a self-contained `*.review.html` — the novelty×blast matrix, group cards
-sorted by priority, citations, per-group checklists, and acknowledgement controls.
+sorted by priority, citations, the **cited diff hunks inline** (🟢 busy-work collapsed,
+with a "Hide trivial diffs" toggle), per-group checklists, and acknowledgement controls.
 Open it in a browser. Tell the reviewer the path.
 
 ### 4. Walk the reviewer through it — riskiest first
@@ -80,14 +94,18 @@ For each group, give the reviewer:
 - then capture their **ack + any note**.
 
 Batch the 🟢 busy-work: summarize it in one block and let them acknowledge it all at
-once. Update the viewer's sidecar (`.pr-review/<id>.json`) as acks come in.
+once. Acks are captured **in the viewer** (browser `localStorage`); they reach the
+filesystem only when the reviewer clicks **Export review state**, which downloads
+`<id>.review.json` (a schema-shaped sidecar). To act on acks, ask the reviewer to
+export and point you at that file.
 
 ### 5. (Optional) Enforce
 
-Advisory by default. If invoked with enforcement on, do **not** report the branch
-"review-clean" until every 🔴 (and high-blast 🟡) group is acknowledged. If writing
-anything back to the PR, use **Draft → Show the reviewer exactly what will be posted
-→ get explicit approval → post**. Never post without that gate.
+Advisory by default. **Only if the reviewer explicitly asks you to enforce** (it's a
+natural-language request, not a flag): read back their exported `<id>.review.json` and
+do **not** report the branch "review-clean" until every 🔴 (and high-blast 🟡) group is
+`acknowledged`. If writing anything back to the PR, use **Draft → Show the reviewer
+exactly what will be posted → get explicit approval → post**. Never post without that gate.
 
 ## Guardrails
 

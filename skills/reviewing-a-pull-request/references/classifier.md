@@ -16,8 +16,10 @@ a bug-finder and you do **not** approve anything.
 
 **Your inputs:**
 - Diff: `{DIFF_PATH}`
-- PR metadata (title + description): `{PR_META_PATH}`
+- Diff summary (file count + size; flags a large diff): `{DIFFSTAT_PATH}`
+- PR metadata, already in the schema's `pr` shape — copy it straight into `pr`: `{PR_META_PATH}`
 - Repo agent-instruction files (define "existing pattern" and "sensitive area"): `{RULES_DIR}`
+- The target repo itself: you have read access — open sibling files to judge pattern fit.
 
 **Do this:**
 1. Read the repo rules. Note conventions (where resolvers/forms/etc. live) and any
@@ -32,6 +34,17 @@ a bug-finder and you do **not** approve anything.
    - `review_focus` — what the human should verify. For 🔴 groups, add a `checklist`
      of concrete surface checks (e.g. "new queue → DLQ + retry policy + alerting?").
 4. Record which rule files you used in `rules_sources`.
+
+**Edge cases (handle these, don't ignore them):**
+- **No rule files** (`rules/` empty): proceed in degraded mode — lean on in-diff signals and the
+  filenames/paths, and lower your confidence. Say so in the affected groups' `review_focus`.
+- **Pattern fit you can't verify**: if you can't confirm a 🟡 follows an existing pattern (no sibling
+  found), don't guess — score conservatively and flag it in `review_focus` ("no existing pattern found,
+  confirm this is the intended approach").
+- **Large diff** (diffstat flags it): group per top-level directory and merge, rather than trying to
+  hold the whole diff at once. Note any area you sampled rather than read fully.
+- **Generated / binary / lockfiles** (e.g. `*.lock`, `dist/`, `*.min.*`, `*.snap`, vendored code):
+  exclude them from grouping and citations; at most mention them once as "generated — not reviewed."
 
 **Write** the result as JSON conforming to the schema to: `{OUTPUT_PATH}`
 (default `.pr-review/classification.json`). Output JSON only — no prose, no fences.

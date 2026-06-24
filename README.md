@@ -41,11 +41,11 @@ Full definitions, the scoring rubric, and the priority matrix live in
 ## How it works (MVP: Claude Code + Cmux / Conductor)
 
 ```
-1. ACQUIRE   scripts/fetch_pr.sh   → diff + description + comments + repo rule files
+1. ACQUIRE   fetch_pr.sh        → diff + description + comments + repo rule files + diffstat
 2. CLASSIFY  subagent scoped to the diff, using spec/ → structured JSON (output-schema.json)
-3. RENDER    scripts/render_viewer.py → self-contained interactive HTML viewer
+3. RENDER    render_viewer.py --diff → interactive HTML viewer, with cited hunks inline
 4. WALK      agent walks the reviewer riskiest-first; captures per-group acks
-5. (opt) ENFORCE   --enforce gates "review-clean" until 🔴 groups are acknowledged
+5. (opt) ENFORCE   on request, won't call the branch "review-clean" until 🔴 groups are acked
 ```
 
 The **host agent is the only runtime** — Claude reads the diff and the repo's own
@@ -68,8 +68,8 @@ it renders identically everywhere.
 
 ## Prior art & positioning
 
-There's real prior art on the _blast-radius_ axis (Meta's
-[RADAR](https://arxiv.org/abs/2605.30208), the
+There's real prior art on the _blast-radius_ axis (Meta's RADAR / "Risk-Aware Diff
+Auto Review", the
 [Impact Assessment skill](https://mcpmarket.com/tools/skills/impact-assessment-blast-radius-analysis),
 [ARGUS](https://argus.reviews/)) and many _bug-finding_ reviewers (Anthropic's
 Claude Code Review, [obra/superpowers](https://github.com/obra/superpowers)). **Nobody

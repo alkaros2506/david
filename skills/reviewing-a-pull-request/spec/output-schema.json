@@ -30,7 +30,8 @@
       "minItems": 1,
       "items": { "$ref": "#/$defs/group" }
     },
-    "generated_at": { "type": "string", "format": "date-time" }
+    "generated_at": { "type": "string", "format": "date-time" },
+    "reviewer": { "type": "string", "description": "Set by the viewer on export; the human who reviewed" }
   },
   "$defs": {
     "group": {
