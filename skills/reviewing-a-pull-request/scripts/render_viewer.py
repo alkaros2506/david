@@ -36,8 +36,12 @@ def parse_args(argv):
 
 def parse_diff(text):
     """Unified diff -> {filename: [{header, start, end, rows:[[marker,new_lineno,text]]}]}."""
-    files, cur, in_hunk, new_no = {}, None, False, 0
-    for line in text.splitlines():
+    files, cur, in_hunk, new_no, need_new, need_old = {}, None, False, 0, 0, 0
+    # split on "\n" only (NOT splitlines(), which also breaks on \f, NEL, U+2028/9 that
+    # appear in changed *content* and would shift line numbers); honor each hunk's
+    # declared line counts so the trailing newline / out-of-hunk lines add no phantom rows.
+    for raw in text.split("\n"):
+        line = raw[:-1] if raw.endswith("\r") else raw
         if line.startswith("diff --git"):
             cur, in_hunk = None, False
             continue
@@ -51,8 +55,10 @@ def parse_diff(text):
                 files.setdefault(cur, [])
             continue
         if line.startswith("@@"):
-            m = re.search(r"\+(\d+)", line)
-            new_no = int(m.group(1)) if m else 0
+            m = re.match(r"@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@", line)
+            new_no = int(m.group(3)) if m else 0
+            need_old = int(m.group(2)) if (m and m.group(2)) else 1
+            need_new = int(m.group(4)) if (m and m.group(4)) else 1
             in_hunk = True
             if cur:
                 files[cur].append({"header": line, "start": new_no, "rows": []})
@@ -60,14 +66,17 @@ def parse_diff(text):
         if not in_hunk or not cur or not files.get(cur):
             continue
         tag = line[:1]
-        if tag == "+":
-            files[cur][-1]["rows"].append(["+", new_no, line[1:]]); new_no += 1
-        elif tag == "-":
-            files[cur][-1]["rows"].append(["-", None, line[1:]])
-        elif tag == "\\":
+        if tag == "\\":  # "\ No newline at end of file" — does not consume a hunk line
             continue
-        else:  # context line (leading space, or a bare empty line at EOF)
-            files[cur][-1]["rows"].append([" ", new_no, line[1:] if tag == " " else line]); new_no += 1
+        if tag == "+":
+            files[cur][-1]["rows"].append(["+", new_no, line[1:]]); new_no += 1; need_new -= 1
+        elif tag == "-":
+            files[cur][-1]["rows"].append(["-", None, line[1:]]); need_old -= 1
+        else:  # context: leading space, or a bare empty line inside the hunk
+            files[cur][-1]["rows"].append([" ", new_no, line[1:] if tag == " " else line])
+            new_no += 1; need_new -= 1; need_old -= 1
+        if need_new <= 0 and need_old <= 0:
+            in_hunk = False
     for hunks in files.values():
         for h in hunks:
             news = [r[1] for r in h["rows"] if r[1] is not None]

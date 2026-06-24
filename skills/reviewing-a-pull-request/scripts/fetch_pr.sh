@@ -32,11 +32,14 @@ diffstat() {
   python3 - "$OUTDIR/diff.patch" "$OUTDIR/diffstat.txt" <<'PY'
 import sys
 patch = open(sys.argv[1], encoding="utf-8", errors="replace").read()
-files, cur, add, rem = {}, None, 0, 0
-for line in patch.splitlines():
-    if line.startswith("+++ "):
+files, cur, prev, add, rem = {}, None, None, 0, 0
+for raw in patch.split("\n"):
+    line = raw[:-1] if raw.endswith("\r") else raw
+    if line.startswith("--- "):
+        p = line[4:].strip(); prev = None if p == "/dev/null" else (p[2:] if p.startswith("a/") else p)
+    elif line.startswith("+++ "):
         p = line[4:].strip(); p = p[2:] if p.startswith("b/") else p
-        cur = None if p == "/dev/null" else p
+        cur = prev if p == "/dev/null" else p  # deleted file → key on its a/ path
         if cur: files.setdefault(cur, [0, 0])
     elif cur and line.startswith("+") and not line.startswith("+++"):
         files[cur][0] += 1; add += 1
@@ -85,7 +88,7 @@ else
 import json, re, sys
 raw = json.load(open(sys.argv[1]))
 url = raw.get("url", "") or ""
-m = re.search(r"github\.com/([^/]+/[^/]+)/pull/(\d+)", url)
+m = re.search(r"/([^/]+/[^/]+)/pull/(\d+)", url)  # host-agnostic (github.com + Enterprise)
 pid = f"{m.group(1)}#{m.group(2)}" if m else f"#{raw.get('number','')}"
 body = (raw.get("body") or "").strip().replace("\r", "")
 summary = (body[:280] + "…") if len(body) > 280 else body
